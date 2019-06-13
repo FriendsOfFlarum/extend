@@ -5,6 +5,7 @@ namespace FoF\Extend\Controllers;
 use Exception;
 use Flarum\Forum\Auth\Registration;
 use Flarum\Forum\Auth\ResponseFactory;
+use Flarum\Http\UrlGenerator;
 use Flarum\Settings\SettingsRepositoryInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -25,13 +26,20 @@ abstract class AbstractOAuthController implements RequestHandlerInterface {
   protected $settings;
 
   /**
+   * @var UrlGenerator
+   */
+  protected $url;
+
+  /**
    * @param ResponseFactory             $response
    * @param SettingsRepositoryInterface $settings
+   * @param UrlGenerator                $url
    */
-  public function __construct(ResponseFactory $response, SettingsRepositoryInterface $settings)
+  public function __construct(ResponseFactory $response, SettingsRepositoryInterface $settings, UrlGenerator $url)
   {
     $this->response = $response;
     $this->settings = $settings;
+    $this->url = $url;
   }
 
   /**
@@ -43,7 +51,7 @@ abstract class AbstractOAuthController implements RequestHandlerInterface {
    */
   public function handle(ServerRequestInterface $request): ResponseInterface
   {
-    $redirectUri = (string) $request->getAttribute('originalUri', $request->getUri())->withQuery('');
+    $redirectUri = $this->url->to('forum')->route($this->getRouteName());
     $provider = $this->getProvider($redirectUri);
     
     $session = $request->getAttribute('session');
@@ -73,6 +81,14 @@ abstract class AbstractOAuthController implements RequestHandlerInterface {
       }
     );
   }
+
+  /**
+   * Get OAuth route name, used for redirect url
+   * Example: 'auth.github'
+   *
+   * @return string
+   */
+  abstract protected function getRouteName() : string;
 
   /**
    * Get League OAuth 2.0 provider
