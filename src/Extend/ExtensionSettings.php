@@ -79,7 +79,7 @@ class ExtensionSettings implements ExtenderInterface
     /**
      * Add setting key.
      *
-     * @param string $key
+     * @param string      $key
      * @param string|null $default
      *
      * @return self
@@ -103,16 +103,16 @@ class ExtensionSettings implements ExtenderInterface
         if (is_callable($input)) {
             $input = (array) app()->call($input);
         }
-        
+
         $keys = array_keys($input);
         $values = array_values($input);
 
         foreach ($keys as $index => $key) {
             if (is_numeric($key)) {
-                $this->keys[] = $this->prefix . $values[$index];
+                $this->keys[] = $this->prefix.$values[$index];
                 $this->defaults[] = null;
             } else {
-                $this->keys[] = $this->prefix . $key;
+                $this->keys[] = $this->prefix.$key;
                 $this->defaults[] = $values[$index];
             }
         }
