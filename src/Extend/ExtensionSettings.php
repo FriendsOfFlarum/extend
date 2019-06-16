@@ -28,12 +28,17 @@ class ExtensionSettings implements ExtenderInterface
     /**
      * @var string
      */
-    private $prefix = null;
+    private $prefix = '';
 
     /**
      * @var array
      */
     private $keys = [];
+
+    /**
+     * @var array
+     */
+    private $defaults = [];
 
     /**
      * @param string $frontend
@@ -49,8 +54,8 @@ class ExtensionSettings implements ExtenderInterface
             'flarum.frontend.forum',
             function (Frontend $frontend, Container $container) {
                 $frontend->content(function (Document $document) {
-                    foreach ($this->keys as $key) {
-                        $document->payload[$key] = $this->settings->get($key);
+                    foreach ($this->keys as $index => $key) {
+                        $document->payload[$key] = $this->settings->get($key, $this->defaults[$index]);
                     }
                 });
             }
@@ -75,32 +80,42 @@ class ExtensionSettings implements ExtenderInterface
      * Add setting key.
      *
      * @param string $key
+     * @param string|null $default
      *
      * @return self
      */
-    public function addKey($key) : self
+    public function addKey($key, $default = null) : self
     {
-        $this - addKeys([$key]);
+        $this->addKeys([$key => $default]);
 
         return $this;
     }
 
     /**
-     * Add multiple setting keys.
+     * Add multiple setting keys. Supports a callable.
      *
-     * @param array $keys
+     * @param array|callable $input
      *
      * @return self
      */
-    public function addKeys(array $keys) : self
+    public function addKeys($input) : self
     {
-        if (isset($this->prefix)) {
-            $keys = array_map(function ($key) {
-                return $this->prefix.$key;
-            }, $keys);
+        if (is_callable($input)) {
+            $input = (array) app()->call($input);
         }
+        
+        $keys = array_keys($input);
+        $values = array_values($input);
 
-        $this->keys = $keys;
+        foreach ($keys as $index => $key) {
+            if (is_numeric($key)) {
+                $this->keys[] = $this->prefix . $values[$index];
+                $this->defaults[] = null;
+            } else {
+                $this->keys[] = $this->prefix . $key;
+                $this->defaults[] = $values[$index];
+            }
+        }
 
         return $this;
     }
