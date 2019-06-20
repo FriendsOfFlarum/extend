@@ -1,5 +1,14 @@
 <?php
 
+/*
+ * This file is part of fof/extend.
+ *
+ * Copyright (c) 2019 FriendsOfFlarum.
+ *
+ * For the full copyright and license information, please view the LICENSE.md
+ * file that was distributed with this source code.
+ */
+
 namespace FoF\Extend\Extend;
 
 use Flarum\Extend\ExtenderInterface;
@@ -22,7 +31,7 @@ class DisableFloodGate implements ExtenderInterface
 
         $events->listen(CheckingForFlooding::class, function (CheckingForFlooding $event) {
             if ($event->actor->isGuest()) {
-                return null;
+                return;
             }
 
             $whiteListed = in_array($event->actor->id, $this->users) || $event->actor->groups()
