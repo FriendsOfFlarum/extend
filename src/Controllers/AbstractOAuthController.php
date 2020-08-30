@@ -16,6 +16,7 @@ use Flarum\Forum\Auth\Registration;
 use Flarum\Forum\Auth\ResponseFactory;
 use Flarum\Http\UrlGenerator;
 use Flarum\Settings\SettingsRepositoryInterface;
+use Illuminate\Support\Arr;
 use Laminas\Diactoros\Response\RedirectResponse;
 use League\OAuth2\Client\Provider\AbstractProvider;
 use League\OAuth2\Client\Provider\ResourceOwnerInterface;
@@ -66,8 +67,8 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
 
         $session = $request->getAttribute('session');
         $queryParams = $request->getQueryParams();
-        $code = array_get($queryParams, 'code');
-        $state = array_get($queryParams, 'state');
+        $code = Arr::get($queryParams, 'code');
+        $state = Arr::get($queryParams, 'state');
 
         if (!$code) {
             $authUrl = $provider->getAuthorizationUrl($this->getAuthorizationUrlOptions());
