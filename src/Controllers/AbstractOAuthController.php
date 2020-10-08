@@ -88,8 +88,8 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
             $this->getProviderName(),
             $this->getIdentifier($user),
             function (Registration $registration) use ($user, $token) {
-          $this->setSuggestions($registration, $user, $token);
-      }
+                $this->setSuggestions($registration, $user, $token);
+            }
         );
     }
 
