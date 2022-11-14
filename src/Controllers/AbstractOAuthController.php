@@ -14,9 +14,14 @@ namespace FoF\Extend\Controllers;
 use Exception;
 use Flarum\Forum\Auth\Registration;
 use Flarum\Forum\Auth\ResponseFactory;
+use Flarum\Foundation\ValidationException;
+use Flarum\Http\RequestUtil;
 use Flarum\Http\UrlGenerator;
 use Flarum\Settings\SettingsRepositoryInterface;
+use Flarum\User\User;
+use Illuminate\Session\Store;
 use Illuminate\Support\Arr;
+use Laminas\Diactoros\Response\HtmlResponse;
 use Laminas\Diactoros\Response\RedirectResponse;
 use League\OAuth2\Client\Provider\AbstractProvider;
 use League\OAuth2\Client\Provider\ResourceOwnerInterface;
@@ -65,10 +70,15 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
         $redirectUri = $this->url->to('forum')->route($this->getRouteName());
         $provider = $this->getProvider($redirectUri);
 
+        /** @var Store $session */
         $session = $request->getAttribute('session');
         $queryParams = $request->getQueryParams();
         $code = Arr::get($queryParams, 'code');
         $state = Arr::get($queryParams, 'state');
+
+        if ($requestLinkTo = Arr::pull($queryParams, 'linkTo')) {
+            $session->put('linkTo', $requestLinkTo);
+        }
 
         if (!$code) {
             $authUrl = $provider->getAuthorizationUrl($this->getAuthorizationUrlOptions());
@@ -84,6 +94,19 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
         $token = $provider->getAccessToken('authorization_code', compact('code'));
         $user = $provider->getResourceOwner($token);
 
+        if ($shouldLink = $session->remove('linkTo')) {
+            // Don't register a new user, just link to the existing account
+            $actor = RequestUtil::getActor($request);
+
+            $actor->assertRegistered();
+
+            if ($actor->id !== (int) $shouldLink) {
+                throw new ValidationException(['linkAccount' => 'User data mismatch']);
+            }
+
+            return $this->link($actor, $user, $provider);
+        }
+
         return $this->response->make(
             $this->getProviderName(),
             $this->getIdentifier($user),
@@ -91,6 +114,26 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
                 $this->setSuggestions($registration, $user, $token);
             }
         );
+    }
+
+    /**
+     * Link the currently authenticated user to the OAuth account.
+     * 
+     * @param User $user
+     * @param ResourceOwnerInterface $resourceOwner
+     * 
+     * @return HtmlResponse
+     */
+    protected function link(User $user, $resourceOwner): HtmlResponse
+    {
+        $user->loginProviders()->firstOrCreate([
+            'provider' => $this->getProviderName(),
+            'identifier' => $this->getIdentifier($resourceOwner),
+        ])->touch();
+
+        $content = '<script>window.close(); window.opener.location.reload();</script>';
+
+        return new HtmlResponse($content);
     }
 
     /**
