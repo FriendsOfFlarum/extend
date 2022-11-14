@@ -18,6 +18,7 @@ use Flarum\Foundation\ValidationException;
 use Flarum\Http\RequestUtil;
 use Flarum\Http\UrlGenerator;
 use Flarum\Settings\SettingsRepositoryInterface;
+use Flarum\User\LoginProvider;
 use Flarum\User\User;
 use Illuminate\Session\Store;
 use Illuminate\Support\Arr;
@@ -128,6 +129,10 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
      */
     protected function link(User $user, $resourceOwner): HtmlResponse
     {
+        if (LoginProvider::where('identifier', $this->getIdentifier($resourceOwner))->where('provider', $this->getProviderName())->exists()) {
+            throw new ValidationException(['linkAccount' => 'Account already linked to another user']);
+        }
+        
         $user->loginProviders()->firstOrCreate([
             'provider'   => $this->getProviderName(),
             'identifier' => $this->getIdentifier($resourceOwner),
