@@ -132,7 +132,7 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
         if (LoginProvider::where('identifier', $this->getIdentifier($resourceOwner))->where('provider', $this->getProviderName())->exists()) {
             throw new ValidationException(['linkAccount' => 'Account already linked to another user']);
         }
-        
+
         $user->loginProviders()->firstOrCreate([
             'provider'   => $this->getProviderName(),
             'identifier' => $this->getIdentifier($resourceOwner),
