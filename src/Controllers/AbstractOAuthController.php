@@ -95,16 +95,18 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
         $user = $provider->getResourceOwner($token);
 
         if ($shouldLink = $session->remove('linkTo')) {
-            // Don't register a new user, just link to the existing account
+            // Don't register a new user, just link to the existing account, else continue with registration.
             $actor = RequestUtil::getActor($request);
 
-            $actor->assertRegistered();
+            if ($actor->exists) {
+                $actor->assertRegistered();
 
-            if ($actor->id !== (int) $shouldLink) {
-                throw new ValidationException(['linkAccount' => 'User data mismatch']);
+                if ($actor->id !== (int) $shouldLink) {
+                    throw new ValidationException(['linkAccount' => 'User data mismatch']);
+                }
+    
+                return $this->link($actor, $user, $provider);
             }
-
-            return $this->link($actor, $user, $provider);
         }
 
         return $this->response->make(
