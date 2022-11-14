@@ -105,7 +105,7 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
                     throw new ValidationException(['linkAccount' => 'User data mismatch']);
                 }
 
-                return $this->link($actor, $user, $provider);
+                return $this->link($actor, $user);
             }
         }
 
