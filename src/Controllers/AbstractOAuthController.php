@@ -118,16 +118,16 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
 
     /**
      * Link the currently authenticated user to the OAuth account.
-     * 
-     * @param User $user
+     *
+     * @param User                   $user
      * @param ResourceOwnerInterface $resourceOwner
-     * 
+     *
      * @return HtmlResponse
      */
     protected function link(User $user, $resourceOwner): HtmlResponse
     {
         $user->loginProviders()->firstOrCreate([
-            'provider' => $this->getProviderName(),
+            'provider'   => $this->getProviderName(),
             'identifier' => $this->getIdentifier($resourceOwner),
         ])->touch();
 
