@@ -20,6 +20,8 @@ use Flarum\Http\UrlGenerator;
 use Flarum\Settings\SettingsRepositoryInterface;
 use Flarum\User\LoginProvider;
 use Flarum\User\User;
+use FoF\Extend\Events\OAuthLoginSuccessful;
+use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Session\Store;
 use Illuminate\Support\Arr;
 use Laminas\Diactoros\Response\HtmlResponse;
@@ -48,15 +50,22 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
     protected $url;
 
     /**
+     * @var Dispatcher
+     */
+    protected $events;
+
+    /**
      * @param ResponseFactory             $response
      * @param SettingsRepositoryInterface $settings
      * @param UrlGenerator                $url
+     * @param Dispatcher                  $events
      */
-    public function __construct(ResponseFactory $response, SettingsRepositoryInterface $settings, UrlGenerator $url)
+    public function __construct(ResponseFactory $response, SettingsRepositoryInterface $settings, UrlGenerator $url, Dispatcher $events)
     {
         $this->response = $response;
         $this->settings = $settings;
         $this->url = $url;
+        $this->events = $events;
     }
 
     /**
@@ -95,19 +104,19 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
         $token = $provider->getAccessToken('authorization_code', compact('code'));
         $user = $provider->getResourceOwner($token);
 
-        if ($shouldLink = $session->remove('linkTo')) {
-            // Don't register a new user, just link to the existing account, else continue with registration.
-            $actor = RequestUtil::getActor($request);
+        $actor = RequestUtil::getActor($request);
 
-            if ($actor->exists) {
-                $actor->assertRegistered();
+        $this->events->dispatch(new OAuthLoginSuccessful($token, $user, $this->getProviderName(), $this->getIdentifier($user), $actor));
 
-                if ($actor->id !== (int) $shouldLink) {
-                    throw new ValidationException(['linkAccount' => 'User data mismatch']);
-                }
+        // Don't register a new user, just link to the existing account, else continue with registration.
+        if ($shouldLink = $session->remove('linkTo') && $actor->exists) {
+            $actor->assertRegistered();
 
-                return $this->link($actor, $user);
+            if ($actor->id !== (int) $shouldLink) {
+                throw new ValidationException(['linkAccount' => 'User data mismatch']);
             }
+
+            return $this->link($actor, $user);
         }
 
         return $this->response->make(
