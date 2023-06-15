@@ -17,5 +17,8 @@
         "psr-4": {
             "FoF\\Extend\\": "src/"
         }
+    },
+    "require-dev": {
+        "league/oauth2-client": "^2.7"
     }
 }
