@@ -27,6 +27,7 @@ use Laminas\Diactoros\Response\HtmlResponse;
 use Laminas\Diactoros\Response\RedirectResponse;
 use League\OAuth2\Client\Provider\AbstractProvider;
 use League\OAuth2\Client\Provider\ResourceOwnerInterface;
+use League\OAuth2\Client\Token\AccessTokenInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\RequestHandlerInterface;
@@ -95,8 +96,6 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
 
         $actor = RequestUtil::getActor($request);
 
-        $this->events->dispatch(new OAuthLoginSuccessful($token, $user, $this->getProviderName(), $this->getIdentifier($user), $actor));
-
         // Don't register a new user, just link to the existing account, else continue with registration.
         if ($session->has('linkTo') && $actor->exists) {
             $actor->assertRegistered();
@@ -106,8 +105,14 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
                 throw new ValidationException(['linkAccount' => 'User data mismatch']);
             }
 
-            return $this->link($actor, $user);
+            $response = $this->link($actor, $user);
+
+            $this->dispatchSuccessEvent($token, $user, $actor);
+
+            return $response;
         }
+
+        $this->dispatchSuccessEvent($token, $user, $actor);
 
         return $this->response->make(
             $this->getProviderName(),
@@ -116,6 +121,11 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
                 $this->setSuggestions($registration, $user, $token);
             }
         );
+    }
+
+    private function dispatchSuccessEvent(AccessTokenInterface $token, ResourceOwnerInterface $user, ?User $actor): void
+    {
+        $this->events->dispatch(new OAuthLoginSuccessful($token, $user, $this->getProviderName(), $this->getIdentifier($user), $actor));
     }
 
     /**
@@ -130,7 +140,7 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
         }
 
         $user->loginProviders()->firstOrCreate([
-            'provider'   => $this->getProviderName(),
+            'provider' => $this->getProviderName(),
             'identifier' => $this->getIdentifier($resourceOwner),
         ])->touch();
 
