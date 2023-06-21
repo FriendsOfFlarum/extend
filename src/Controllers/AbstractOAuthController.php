@@ -140,7 +140,7 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
         }
 
         $user->loginProviders()->firstOrCreate([
-            'provider' => $this->getProviderName(),
+            'provider'   => $this->getProviderName(),
             'identifier' => $this->getIdentifier($resourceOwner),
         ])->touch();
 
