@@ -112,15 +112,17 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
             return $response;
         }
 
-        $this->dispatchSuccessEvent($token, $user, $actor);
-
-        return $this->response->make(
+        $response = $this->response->make(
             $this->getProviderName(),
             $this->getIdentifier($user),
             function (Registration $registration) use ($user, $token) {
                 $this->setSuggestions($registration, $user, $token);
             }
         );
+
+        $this->dispatchSuccessEvent($token, $user, $actor);
+
+        return $response;
     }
 
     private function dispatchSuccessEvent(AccessTokenInterface $token, ResourceOwnerInterface $user, ?User $actor): void
@@ -140,7 +142,7 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
         }
 
         $user->loginProviders()->firstOrCreate([
-            'provider'   => $this->getProviderName(),
+            'provider' => $this->getProviderName(),
             'identifier' => $this->getIdentifier($resourceOwner),
         ])->touch();
 
