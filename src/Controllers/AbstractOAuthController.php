@@ -11,7 +11,6 @@
 
 namespace FoF\Extend\Controllers;
 
-use Exception;
 use Flarum\Forum\Auth\Registration;
 use Flarum\Forum\Auth\ResponseFactory;
 use Flarum\Foundation\ValidationException;
@@ -54,12 +53,6 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
      */
     protected $events;
 
-    /**
-     * @param ResponseFactory             $response
-     * @param SettingsRepositoryInterface $settings
-     * @param UrlGenerator                $url
-     * @param Dispatcher                  $events
-     */
     public function __construct(ResponseFactory $response, SettingsRepositoryInterface $settings, UrlGenerator $url, Dispatcher $events)
     {
         $this->response = $response;
@@ -69,11 +62,7 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
     }
 
     /**
-     * @param ServerRequestInterface $request
-     *
-     * @throws Exception
-     *
-     * @return ResponseInterface
+     * @throws \Exception
      */
     public function handle(ServerRequestInterface $request): ResponseInterface
     {
@@ -98,7 +87,7 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
         } elseif (!$state || $state !== $session->get('oauth2state')) {
             $session->remove('oauth2state');
 
-            throw new Exception('Invalid state');
+            throw new \Exception('Invalid state');
         }
 
         $token = $provider->getAccessToken('authorization_code', compact('code'));
@@ -109,10 +98,11 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
         $this->events->dispatch(new OAuthLoginSuccessful($token, $user, $this->getProviderName(), $this->getIdentifier($user), $actor));
 
         // Don't register a new user, just link to the existing account, else continue with registration.
-        if ($shouldLink = $session->remove('linkTo') && $actor->exists) {
+        if ($session->has('linkTo') && $actor->exists) {
             $actor->assertRegistered();
+            $sessionLink = (int) $session->remove('linkTo');
 
-            if ($actor->id !== (int) $shouldLink) {
+            if ($actor->id !== $sessionLink || $sessionLink === 0) {
                 throw new ValidationException(['linkAccount' => 'User data mismatch']);
             }
 
@@ -131,10 +121,7 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
     /**
      * Link the currently authenticated user to the OAuth account.
      *
-     * @param User                   $user
      * @param ResourceOwnerInterface $resourceOwner
-     *
-     * @return HtmlResponse
      */
     protected function link(User $user, $resourceOwner): HtmlResponse
     {
@@ -143,7 +130,7 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
         }
 
         $user->loginProviders()->firstOrCreate([
-            'provider'   => $this->getProviderName(),
+            'provider' => $this->getProviderName(),
             'identifier' => $this->getIdentifier($resourceOwner),
         ])->touch();
 
@@ -155,31 +142,21 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
     /**
      * Get OAuth route name, used for redirect url
      * Example: 'auth.github'.
-     *
-     * @return string
      */
     abstract protected function getRouteName(): string;
 
     /**
      * Get League OAuth 2.0 provider.
-     *
-     * @param string $redirectUri
-     *
-     * @return AbstractProvider
      */
     abstract protected function getProvider(string $redirectUri): AbstractProvider;
 
     /**
      * Get League OAuth 2.0 provider name.
-     *
-     * @return string
      */
     abstract protected function getProviderName(): string;
 
     /**
      * Get authorization URL options.
-     *
-     * @return array
      */
     abstract protected function getAuthorizationUrlOptions(): array;
 
@@ -187,17 +164,13 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
      * Get user identifier.
      *
      * @param ResourceOwnerInterface $user
-     *
-     * @return string
      */
     abstract protected function getIdentifier($user): string;
 
     /**
      * Set form suggestions.
      *
-     * @param Registration           $registration
      * @param ResourceOwnerInterface $user
-     * @param string                 $token
      *
      * @return void
      */
