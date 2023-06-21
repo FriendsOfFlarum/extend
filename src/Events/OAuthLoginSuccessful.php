@@ -13,14 +13,14 @@ namespace FoF\Extend\Events;
 
 use Flarum\User\User;
 use League\OAuth2\Client\Provider\ResourceOwnerInterface;
-use League\OAuth2\Client\Token\AccessToken;
+use League\OAuth2\Client\Token\AccessTokenInterface;
 
 class OAuthLoginSuccessful
 {
     /**
      * The access token provided by the service.
      *
-     * @var AccessToken
+     * @var AccessTokenInterface
      */
     public $token;
 
@@ -54,7 +54,7 @@ class OAuthLoginSuccessful
      */
     public $actor;
 
-    public function __construct(AccessToken $token, ResourceOwnerInterface $userResource, string $providerName, string $identifier, ?User $actor)
+    public function __construct(AccessTokenInterface $token, ResourceOwnerInterface $userResource, string $providerName, string $identifier, ?User $actor)
     {
         $this->token = $token;
         $this->userResource = $userResource;
