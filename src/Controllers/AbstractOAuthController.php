@@ -138,7 +138,7 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
     protected function link(User $user, $resourceOwner): HtmlResponse
     {
         /** @var LoginProvider|null */
-        $provider = LoginProvider::where('identifier', $this->getIdentifier($resourceOwner))->where('provider', $this->getProviderName());
+        $provider = LoginProvider::where('identifier', $this->getIdentifier($resourceOwner))->where('provider', $this->getProviderName())->first();
 
         if ($provider && $provider->exists() && $provider->user_id !== $user->id) {
             throw new ValidationException(['linkAccount' => 'Account already linked to another user']);
