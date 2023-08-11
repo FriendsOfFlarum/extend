@@ -72,6 +72,12 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
 
         /** @var Store $session */
         $session = $request->getAttribute('session');
+
+        // Pass the session to the provider, if it supports it.
+        if (method_exists($provider, 'setSession')) {
+            $provider->setSession($session);
+        }
+        
         $queryParams = $request->getQueryParams();
         $code = Arr::get($queryParams, 'code');
         $state = Arr::get($queryParams, 'state');
