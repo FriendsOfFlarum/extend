@@ -19,6 +19,7 @@ use Flarum\Http\UrlGenerator;
 use Flarum\Settings\SettingsRepositoryInterface;
 use Flarum\User\LoginProvider;
 use Flarum\User\User;
+use FoF\Extend\Events\LinkingToProvider;
 use FoF\Extend\Events\OAuthLoginSuccessful;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Session\Store;
@@ -34,6 +35,21 @@ use Psr\Http\Server\RequestHandlerInterface;
 
 abstract class AbstractOAuthController implements RequestHandlerInterface
 {
+    /**
+     * Session key for OAuth2 state.
+     */
+    const SESSION_OAUTH2STATE = 'oauth2state';
+
+    /**
+     * Session key for OAuth2 provider.
+     */
+    const SESSION_OAUTH2PROVIDER = 'oauth2provider';
+
+    /**
+     * Session key for linkTo.
+     */
+    const SESSION_LINKTO = 'linkTo';
+
     /**
      * @var ResponseFactory
      */
@@ -54,8 +70,12 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
      */
     protected $events;
 
-    public function __construct(ResponseFactory $response, SettingsRepositoryInterface $settings, UrlGenerator $url, Dispatcher $events)
-    {
+    public function __construct(
+        ResponseFactory $response,
+        SettingsRepositoryInterface $settings,
+        UrlGenerator $url,
+        Dispatcher $events
+    ) {
         $this->response = $response;
         $this->settings = $settings;
         $this->url = $url;
@@ -67,73 +87,136 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
      */
     public function handle(ServerRequestInterface $request): ResponseInterface
     {
+        $provider = $this->identifyProvider();
+
+        $session = $this->initializeSession($request, $provider);
+
+        if (!$this->hasAuthorizationCode($request)) {
+            return $this->redirectToAuthorizationUrl($provider, $session);
+        }
+
+        $this->validateState($session, $request);
+
+        $token = $this->obtainAccessToken($provider, Arr::get($request->getQueryParams(), 'code'));
+        $userResource = $provider->getResourceOwner($token);
+
+        return $this->handleOAuthResponse($request, $token, $userResource, $session);
+    }
+
+    protected function identifyProvider(): AbstractProvider
+    {
         $redirectUri = $this->url->to('forum')->route($this->getRouteName());
-        $provider = $this->getProvider($redirectUri);
 
-        /** @var Store $session */
+        return $this->getProvider($redirectUri);
+    }
+
+    protected function initializeSession(ServerRequestInterface $request, AbstractProvider $provider): Store
+    {
         $session = $request->getAttribute('session');
+        $session->put(self::SESSION_OAUTH2PROVIDER, $this->getProviderName());
 
-        // Pass the session to the provider, if it supports it.
         if (method_exists($provider, 'setSession')) {
             $provider->setSession($session);
         }
 
-        $queryParams = $request->getQueryParams();
-        $code = Arr::get($queryParams, 'code');
-        $state = Arr::get($queryParams, 'state');
-
-        if ($requestLinkTo = Arr::pull($queryParams, 'linkTo')) {
-            $session->put('linkTo', $requestLinkTo);
+        if ($requestLinkTo = Arr::get($request->getQueryParams(), 'linkTo')) {
+            $session->put(self::SESSION_LINKTO, $requestLinkTo);
         }
 
-        if (!$code) {
-            $authUrl = $provider->getAuthorizationUrl($this->getAuthorizationUrlOptions());
-            $session->put('oauth2state', $provider->getState());
-
-            return new RedirectResponse($authUrl.'&display=popup');
-        } elseif (!$state || $state !== $session->get('oauth2state')) {
-            $session->remove('oauth2state');
-
-            throw new \Exception('Invalid state');
-        }
-
-        $token = $provider->getAccessToken('authorization_code', compact('code'));
-        $user = $provider->getResourceOwner($token);
-
-        $actor = RequestUtil::getActor($request);
-
-        // Don't register a new user, just link to the existing account, else continue with registration.
-        if ($session->has('linkTo') && $actor->exists) {
-            $actor->assertRegistered();
-            $sessionLink = (int) $session->remove('linkTo');
-
-            if ($actor->id !== $sessionLink || $sessionLink === 0) {
-                throw new ValidationException(['linkAccount' => 'User data mismatch']);
-            }
-
-            $response = $this->link($actor, $user);
-
-            $this->dispatchSuccessEvent($token, $user, $actor);
-
-            return $response;
-        }
-
-        $response = $this->response->make(
-            $this->getProviderName(),
-            $this->getIdentifier($user),
-            function (Registration $registration) use ($user, $token) {
-                $this->setSuggestions($registration, $user, $token);
-            }
-        );
-
-        $this->dispatchSuccessEvent($token, $user, $actor);
-
-        return $response;
+        return $session;
     }
 
-    private function dispatchSuccessEvent(AccessTokenInterface $token, ResourceOwnerInterface $user, ?User $actor): void
+    /**
+     * Determine if the request has an authorization code.
+     *
+     * @param ServerRequestInterface $request
+     *
+     * @return bool
+     */
+    protected function hasAuthorizationCode(ServerRequestInterface $request): bool
     {
-        $this->events->dispatch(new OAuthLoginSuccessful($token, $user, $this->getProviderName(), $this->getIdentifier($user), $actor));
+        return Arr::has($request->getQueryParams(), 'code');
+    }
+
+    /**
+     * Set the redirect response to the OAuth provider's authorization URL, and store the OAuth2 state.
+     *
+     * @param AbstractProvider $provider
+     * @param Store            $session
+     *
+     * @return RedirectResponse
+     */
+    protected function redirectToAuthorizationUrl(AbstractProvider $provider, Store $session): RedirectResponse
+    {
+        $authUrl = $provider->getAuthorizationUrl($this->getAuthorizationUrlOptions());
+        $session->put(self::SESSION_OAUTH2STATE, $provider->getState());
+
+        return new RedirectResponse($authUrl.'&display='.$this->getDisplayType());
+    }
+
+    /**
+     * Validate the OAuth2 state.
+     *
+     * @param Store                  $session
+     * @param ServerRequestInterface $request
+     *
+     * @return void
+     */
+    protected function validateState(Store $session, ServerRequestInterface $request): void
+    {
+        $state = Arr::get($request->getQueryParams(), 'state');
+
+        if (!$state || $state !== $session->get(self::SESSION_OAUTH2STATE)) {
+            $this->handleOAuthError($session);
+        }
+    }
+
+    /**
+     * Remove the OAuth2 state and throw an exception.
+     *
+     * @param Store $session
+     *
+     * @return void
+     */
+    protected function handleOAuthError(Store $session): void
+    {
+        $session->remove(self::SESSION_OAUTH2STATE);
+        $session->remove(self::SESSION_OAUTH2PROVIDER);
+
+        throw new \Exception('Invalid state');
+    }
+
+    /**
+     * Request an access token from the OAuth provider.
+     *
+     * @param AbstractProvider $provider
+     * @param string           $code
+     *
+     * @return AccessTokenInterface
+     */
+    protected function obtainAccessToken(AbstractProvider $provider, string $code): AccessTokenInterface
+    {
+        return $provider->getAccessToken('authorization_code', compact('code'));
+    }
+
+    /**
+     * Dispatch an event when OAuth login is successful.
+     *
+     * @param AccessTokenInterface   $token The access token.
+     * @param ResourceOwnerInterface $user  The authenticated user's resource owner instance.
+     * @param User|null              $actor The current authenticated actor.
+     */
+    protected function dispatchSuccessEvent(AccessTokenInterface $token, ResourceOwnerInterface $resourceOwner, ?User $actor): void
+    {
+        $this->events->dispatch(
+            new OAuthLoginSuccessful(
+                $token,
+                $resourceOwner,
+                $this->getProviderName(),
+                $this->getIdentifier($resourceOwner),
+                $actor
+            )
+        );
     }
 
     /**
@@ -141,14 +224,24 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
      *
      * @param ResourceOwnerInterface $resourceOwner
      */
-    protected function link(User $user, $resourceOwner): HtmlResponse
+    protected function link(User $user, ResourceOwnerInterface $resourceOwner): HtmlResponse
     {
         /** @var LoginProvider|null */
-        $provider = LoginProvider::where('identifier', $this->getIdentifier($resourceOwner))->where('provider', $this->getProviderName())->first();
+        $provider = LoginProvider::where('identifier', $this->getIdentifier($resourceOwner))
+            ->where('provider', $this->getProviderName())
+            ->first();
 
         if ($provider && $provider->exists() && $provider->user_id !== $user->id) {
             throw new ValidationException(['linkAccount' => 'Account already linked to another user']);
         }
+
+        $this->events->dispatch(
+            new LinkingToProvider(
+                $this->getProviderName(),
+                $this->getIdentifier($resourceOwner),
+                $user
+            )
+        );
 
         $user->loginProviders()->firstOrCreate([
             'provider'   => $this->getProviderName(),
@@ -158,6 +251,49 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
         $content = '<script>window.close(); window.opener.app.linkingComplete();</script>';
 
         return new HtmlResponse($content);
+    }
+
+    protected function handleOAuthResponse(ServerRequestInterface $request, AccessTokenInterface $token, ResourceOwnerInterface $resourceOwner, Store $session): ResponseInterface
+    {
+        $actor = RequestUtil::getActor($request);
+
+        // Don't register a new user, just link to the existing account, else continue with registration.
+        if ($session->has(self::SESSION_LINKTO) && $actor->exists) {
+            $actor->assertRegistered();
+            $sessionLink = (int) $session->remove(self::SESSION_LINKTO);
+
+            if ($actor->id !== $sessionLink || $sessionLink === 0) {
+                throw new ValidationException(['linkAccount' => 'User data mismatch']);
+            }
+
+            $response = $this->link($actor, $resourceOwner);
+
+            $this->dispatchSuccessEvent($token, $resourceOwner, $actor);
+
+            return $response;
+        }
+
+        $response = $this->response->make(
+            $this->getProviderName(),
+            $this->getIdentifier($resourceOwner),
+            function (Registration $registration) use ($resourceOwner, $token) {
+                $this->setSuggestions($registration, $resourceOwner, $token);
+            }
+        );
+
+        $this->dispatchSuccessEvent($token, $resourceOwner, $actor);
+
+        return $response;
+    }
+
+    /**
+     * Get the display type for the OAuth process.
+     *
+     * @return string Returns the type of display, e.g. 'popup'.
+     */
+    protected function getDisplayType(): string
+    {
+        return 'popup';
     }
 
     /**
