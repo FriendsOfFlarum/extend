@@ -49,7 +49,7 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
      * Session key for linkTo.
      */
     const SESSION_LINKTO = 'linkTo';
-    
+
     /**
      * @var ResponseFactory
      */
@@ -71,12 +71,11 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
     protected $events;
 
     public function __construct(
-        ResponseFactory $response, 
-        SettingsRepositoryInterface $settings, 
-        UrlGenerator $url, 
+        ResponseFactory $response,
+        SettingsRepositoryInterface $settings,
+        UrlGenerator $url,
         Dispatcher $events
-        )
-    {
+    ) {
         $this->response = $response;
         $this->settings = $settings;
         $this->url = $url;
@@ -107,10 +106,11 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
     protected function identifyProvider(): AbstractProvider
     {
         $redirectUri = $this->url->to('forum')->route($this->getRouteName());
+
         return $this->getProvider($redirectUri);
     }
 
-    protected function initializeSession(ServerRequestInterface $request, AbstractProvider $provider): Store 
+    protected function initializeSession(ServerRequestInterface $request, AbstractProvider $provider): Store
     {
         $session = $request->getAttribute('session');
         $session->put(self::SESSION_OAUTH2PROVIDER, $this->getProviderName());
@@ -130,9 +130,10 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
      * Determine if the request has an authorization code.
      *
      * @param ServerRequestInterface $request
-     * @return boolean
+     *
+     * @return bool
      */
-    protected function hasAuthorizationCode(ServerRequestInterface $request): bool 
+    protected function hasAuthorizationCode(ServerRequestInterface $request): bool
     {
         return Arr::has($request->getQueryParams(), 'code');
     }
@@ -141,28 +142,30 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
      * Set the redirect response to the OAuth provider's authorization URL, and store the OAuth2 state.
      *
      * @param AbstractProvider $provider
-     * @param Store $session
+     * @param Store            $session
+     *
      * @return RedirectResponse
      */
-    protected function redirectToAuthorizationUrl(AbstractProvider $provider, Store $session): RedirectResponse 
+    protected function redirectToAuthorizationUrl(AbstractProvider $provider, Store $session): RedirectResponse
     {
         $authUrl = $provider->getAuthorizationUrl($this->getAuthorizationUrlOptions());
         $session->put(self::SESSION_OAUTH2STATE, $provider->getState());
 
-        return new RedirectResponse($authUrl . '&display=' . $this->getDisplayType());
+        return new RedirectResponse($authUrl.'&display='.$this->getDisplayType());
     }
 
     /**
      * Validate the OAuth2 state.
      *
-     * @param Store $session
+     * @param Store                  $session
      * @param ServerRequestInterface $request
+     *
      * @return void
      */
-    protected function validateState(Store $session, ServerRequestInterface $request): void 
+    protected function validateState(Store $session, ServerRequestInterface $request): void
     {
         $state = Arr::get($request->getQueryParams(), 'state');
-        
+
         if (!$state || $state !== $session->get(self::SESSION_OAUTH2STATE)) {
             $this->handleOAuthError($session);
         }
@@ -172,12 +175,14 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
      * Remove the OAuth2 state and throw an exception.
      *
      * @param Store $session
+     *
      * @return void
      */
-    protected function handleOAuthError(Store $session): void 
+    protected function handleOAuthError(Store $session): void
     {
         $session->remove(self::SESSION_OAUTH2STATE);
         $session->remove(self::SESSION_OAUTH2PROVIDER);
+
         throw new \Exception('Invalid state');
     }
 
@@ -185,31 +190,33 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
      * Request an access token from the OAuth provider.
      *
      * @param AbstractProvider $provider
-     * @param string $code
+     * @param string           $code
+     *
      * @return AccessTokenInterface
      */
-    protected function obtainAccessToken(AbstractProvider $provider, string $code): AccessTokenInterface 
+    protected function obtainAccessToken(AbstractProvider $provider, string $code): AccessTokenInterface
     {
         return $provider->getAccessToken('authorization_code', compact('code'));
     }
 
     /**
      * Dispatch an event when OAuth login is successful.
-     * 
-     * @param AccessTokenInterface $token The access token.
-     * @param ResourceOwnerInterface $user The authenticated user's resource owner instance.
-     * @param User|null $actor The current authenticated actor.
+     *
+     * @param AccessTokenInterface   $token The access token.
+     * @param ResourceOwnerInterface $user  The authenticated user's resource owner instance.
+     * @param User|null              $actor The current authenticated actor.
      */
     protected function dispatchSuccessEvent(AccessTokenInterface $token, ResourceOwnerInterface $resourceOwner, ?User $actor): void
     {
         $this->events->dispatch(
             new OAuthLoginSuccessful(
-                    $token, 
-                    $resourceOwner, 
-                    $this->getProviderName(), 
-                    $this->getIdentifier($resourceOwner), 
-                    $actor
-                ));
+                $token,
+                $resourceOwner,
+                $this->getProviderName(),
+                $this->getIdentifier($resourceOwner),
+                $actor
+            )
+        );
     }
 
     /**
@@ -230,8 +237,8 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
 
         $this->events->dispatch(
             new LinkingToProvider(
-                $this->getProviderName(), 
-                $this->getIdentifier($resourceOwner), 
+                $this->getProviderName(),
+                $this->getIdentifier($resourceOwner),
                 $user
             )
         );
@@ -281,10 +288,10 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
 
     /**
      * Get the display type for the OAuth process.
-     * 
+     *
      * @return string Returns the type of display, e.g. 'popup'.
      */
-    protected function getDisplayType(): string 
+    protected function getDisplayType(): string
     {
         return 'popup';
     }
