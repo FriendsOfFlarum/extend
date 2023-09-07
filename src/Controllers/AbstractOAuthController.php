@@ -115,22 +115,23 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
     /**
      * Fast Track OAuth Flow.
      *
-     * The `fastTrack` method provides a mechanism to expedite the OAuth authentication process 
-     * under certain conditions. Specifically, when a session indicates a `fastTrack` state and 
-     * contains the necessary `oauth_data` (i.e., both `token` and `resourceOwner`), this method 
+     * The `fastTrack` method provides a mechanism to expedite the OAuth authentication process
+     * under certain conditions. Specifically, when a session indicates a `fastTrack` state and
+     * contains the necessary `oauth_data` (i.e., both `token` and `resourceOwner`), this method
      * can be utilized to bypass the standard flow and directly handle the OAuth response.
      *
-     * This can be particularly useful in scenarios where the initial OAuth parameters, provided 
-     * by the authentication provider, have expired due to additional steps in the flow (e.g., 
-     * two-factor authentication). Instead of going through the entire OAuth flow again, the 
+     * This can be particularly useful in scenarios where the initial OAuth parameters, provided
+     * by the authentication provider, have expired due to additional steps in the flow (e.g.,
+     * two-factor authentication). Instead of going through the entire OAuth flow again, the
      * `fastTrack` mechanism uses the saved session data to resume and complete the process.
      *
-     * It's essential to ensure the integrity and validity of the saved session data before 
-     * using this method. The method will return the response of the OAuth flow if the conditions 
+     * It's essential to ensure the integrity and validity of the saved session data before
+     * using this method. The method will return the response of the OAuth flow if the conditions
      * are met, or null otherwise.
      *
-     * @param Store $session The current session instance containing potential OAuth data.
+     * @param Store                  $session The current session instance containing potential OAuth data.
      * @param ServerRequestInterface $request The current server request.
+     *
      * @return ResponseInterface|null The response of the OAuth flow if fast-tracked, or null.
      */
     protected function fastTrack(Store $session, ServerRequestInterface $request): ?ResponseInterface
@@ -191,7 +192,7 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
         $authUrl = $provider->getAuthorizationUrl($this->getAuthorizationUrlOptions());
         $session->put(self::SESSION_OAUTH2STATE, $provider->getState());
 
-        return new RedirectResponse($authUrl . '&display=' . $this->getDisplayType());
+        return new RedirectResponse($authUrl.'&display='.$this->getDisplayType());
     }
 
     /**

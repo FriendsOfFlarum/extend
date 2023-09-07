@@ -1,5 +1,14 @@
 <?php
 
+/*
+ * This file is part of fof/extend.
+ *
+ * Copyright (c) FriendsOfFlarum.
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
 namespace FoF\Extend\Extend;
 
 use Flarum\Extend\ExtenderInterface;
@@ -22,7 +31,7 @@ class OAuthController implements ExtenderInterface
      * - $token: An instance of \League\OAuth2\Client\Token\AccessTokenInterface, representing the access token.
      * - $resourceOwner: An instance of \League\OAuth2\Client\Provider\ResourceOwnerInterface, representing the authenticated user's resource.
      * - $identification: A string identifying `fof/oauth` provider, e.g. `github.
-     * 
+     *
      * It should return either `void` if no further action is required from the callback, or `Psr\Http\Message\ResponseInterface`.
      *
      * @return $this
