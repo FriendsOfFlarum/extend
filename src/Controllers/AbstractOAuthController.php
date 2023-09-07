@@ -70,6 +70,8 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
      */
     protected $events;
 
+    protected static $afterOAuthSuccessCallbacks = [];
+
     public function __construct(
         ResponseFactory $response,
         SettingsRepositoryInterface $settings,
@@ -91,6 +93,13 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
 
         $session = $this->initializeSession($request, $provider);
 
+        if ((bool) $session->get('fastTrack') === true && $session->has('oauth_data')) {
+            $result = $this->fastTrack($session, $request);
+            if ($result !== null) {
+                return $result;
+            }
+        }
+
         if (!$this->hasAuthorizationCode($request)) {
             return $this->redirectToAuthorizationUrl($provider, $session);
         }
@@ -101,6 +110,37 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
         $userResource = $provider->getResourceOwner($token);
 
         return $this->handleOAuthResponse($request, $token, $userResource, $session);
+    }
+
+    /**
+     * Fast Track OAuth Flow.
+     *
+     * The `fastTrack` method provides a mechanism to expedite the OAuth authentication process 
+     * under certain conditions. Specifically, when a session indicates a `fastTrack` state and 
+     * contains the necessary `oauth_data` (i.e., both `token` and `resourceOwner`), this method 
+     * can be utilized to bypass the standard flow and directly handle the OAuth response.
+     *
+     * This can be particularly useful in scenarios where the initial OAuth parameters, provided 
+     * by the authentication provider, have expired due to additional steps in the flow (e.g., 
+     * two-factor authentication). Instead of going through the entire OAuth flow again, the 
+     * `fastTrack` mechanism uses the saved session data to resume and complete the process.
+     *
+     * It's essential to ensure the integrity and validity of the saved session data before 
+     * using this method. The method will return the response of the OAuth flow if the conditions 
+     * are met, or null otherwise.
+     *
+     * @param Store $session The current session instance containing potential OAuth data.
+     * @param ServerRequestInterface $request The current server request.
+     * @return ResponseInterface|null The response of the OAuth flow if fast-tracked, or null.
+     */
+    protected function fastTrack(Store $session, ServerRequestInterface $request): ?ResponseInterface
+    {
+        $token = Arr::get($session->get('oauth_data'), 'token');
+        $resourceOwner = Arr::get($session->get('oauth_data'), 'resourceOwner');
+
+        if ($token instanceof AccessTokenInterface && $resourceOwner instanceof ResourceOwnerInterface) {
+            return $this->handleOAuthResponse($request, $token, $resourceOwner, $session);
+        }
     }
 
     protected function identifyProvider(): AbstractProvider
@@ -151,7 +191,7 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
         $authUrl = $provider->getAuthorizationUrl($this->getAuthorizationUrlOptions());
         $session->put(self::SESSION_OAUTH2STATE, $provider->getState());
 
-        return new RedirectResponse($authUrl.'&display='.$this->getDisplayType());
+        return new RedirectResponse($authUrl . '&display=' . $this->getDisplayType());
     }
 
     /**
@@ -267,23 +307,33 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
             }
 
             $response = $this->link($actor, $resourceOwner);
-
-            $this->dispatchSuccessEvent($token, $resourceOwner, $actor);
-
-            return $response;
+        } else {
+            $response = $this->response->make(
+                $this->getProviderName(),
+                $this->getIdentifier($resourceOwner),
+                function (Registration $registration) use ($resourceOwner, $token) {
+                    $this->setSuggestions($registration, $resourceOwner, $token);
+                }
+            );
         }
 
-        $response = $this->response->make(
-            $this->getProviderName(),
-            $this->getIdentifier($resourceOwner),
-            function (Registration $registration) use ($resourceOwner, $token) {
-                $this->setSuggestions($registration, $resourceOwner, $token);
+        // Execute registered callbacks
+        foreach (static::$afterOAuthSuccessCallbacks as $callback) {
+            $result = $callback($request, $token, $resourceOwner, $this->getProviderName());
+
+            if ($result !== null) {
+                return $result;
             }
-        );
+        }
 
         $this->dispatchSuccessEvent($token, $resourceOwner, $actor);
 
         return $response;
+    }
+
+    public static function setAfterOAuthSuccessCallbacks(array $callbacks)
+    {
+        static::$afterOAuthSuccessCallbacks = array_merge(static::$afterOAuthSuccessCallbacks, $callbacks);
     }
 
     /**
