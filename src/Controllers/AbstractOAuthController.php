@@ -159,7 +159,6 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
     {
         $session = $request->getAttribute('session');
         $session->put(self::SESSION_OAUTH2PROVIDER, $this->getProviderName());
-        
 
         if ($requestLinkTo = Arr::get($request->getQueryParams(), 'linkTo')) {
             $session->put(self::SESSION_LINKTO, $requestLinkTo);
@@ -252,9 +251,9 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
     /**
      * Dispatch an event when OAuth login is successful.
      *
-     * @param AccessTokenInterface   $token The access token.
-     * @param ResourceOwnerInterface $resourceOwner  The authenticated user's resource owner instance.
-     * @param User|null              $actor The current authenticated actor.
+     * @param AccessTokenInterface   $token         The access token.
+     * @param ResourceOwnerInterface $resourceOwner The authenticated user's resource owner instance.
+     * @param User|null              $actor         The current authenticated actor.
      */
     protected function dispatchSuccessEvent(AccessTokenInterface $token, ResourceOwnerInterface $resourceOwner, ?User $actor): void
     {
