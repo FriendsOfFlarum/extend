@@ -28,6 +28,7 @@ use Laminas\Diactoros\Response\HtmlResponse;
 use Laminas\Diactoros\Response\RedirectResponse;
 use League\OAuth2\Client\Provider\AbstractProvider;
 use League\OAuth2\Client\Provider\ResourceOwnerInterface;
+use League\OAuth2\Client\Token\AccessToken;
 use League\OAuth2\Client\Token\AccessTokenInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -106,6 +107,7 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
 
         $this->validateState($session, $request);
 
+        /** @var AccessToken $token */
         $token = $this->obtainAccessToken($provider, Arr::get($request->getQueryParams(), 'code'));
         $userResource = $provider->getResourceOwner($token);
 
@@ -142,6 +144,8 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
         if ($token instanceof AccessTokenInterface && $resourceOwner instanceof ResourceOwnerInterface) {
             return $this->handleOAuthResponse($request, $token, $resourceOwner, $session);
         }
+
+        return null;
     }
 
     protected function identifyProvider(): AbstractProvider
@@ -155,13 +159,18 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
     {
         $session = $request->getAttribute('session');
         $session->put(self::SESSION_OAUTH2PROVIDER, $this->getProviderName());
-
-        if (method_exists($provider, 'setSession')) {
-            $provider->setSession($session);
-        }
+        
 
         if ($requestLinkTo = Arr::get($request->getQueryParams(), 'linkTo')) {
             $session->put(self::SESSION_LINKTO, $requestLinkTo);
+        }
+
+        if ($state = Arr::get($request->getQueryParams(), 'state')) {
+            $session->put(self::SESSION_OAUTH2STATE, $state);
+        }
+
+        if (method_exists($provider, 'setSession')) {
+            $provider->setSession($session);
         }
 
         return $session;
@@ -244,7 +253,7 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
      * Dispatch an event when OAuth login is successful.
      *
      * @param AccessTokenInterface   $token The access token.
-     * @param ResourceOwnerInterface $user  The authenticated user's resource owner instance.
+     * @param ResourceOwnerInterface $resourceOwner  The authenticated user's resource owner instance.
      * @param User|null              $actor The current authenticated actor.
      */
     protected function dispatchSuccessEvent(AccessTokenInterface $token, ResourceOwnerInterface $resourceOwner, ?User $actor): void
@@ -328,6 +337,8 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
         }
 
         $this->dispatchSuccessEvent($token, $resourceOwner, $actor);
+
+        $session->remove(self::SESSION_OAUTH2STATE);
 
         return $response;
     }

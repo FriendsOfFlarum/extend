@@ -91,7 +91,7 @@ class ExtensionSettings implements ExtenderInterface
     public function addKeys($input): self
     {
         if (is_callable($input)) {
-            $input = (array) app()->call($input);
+            $input = (array) resolve(Container::class)->call($input);
         }
 
         $keys = array_keys($input);
