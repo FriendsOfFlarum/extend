@@ -53,9 +53,9 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
     const SESSION_LINKTO = 'linkTo';
 
     /**
-     * 
+     * How long to cache OAuth data for in seconds.
      */
-    const OAUTH_DATA_CACHE_LIFETIME = 60;
+    static $OAUTH_DATA_CACHE_LIFETIME = 60;
 
     /**
      * @var ResponseFactory
@@ -173,7 +173,7 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
         /** @var Store $session */
         $session = $request->getAttribute('session');
 
-        $this->put(self::SESSION_OAUTH2PROVIDER, $this->getProviderName(), $session);
+        $this->putForever(self::SESSION_OAUTH2PROVIDER, $this->getProviderName(), $session);
 
         if ($requestLinkTo = Arr::get($request->getQueryParams(), 'linkTo')) {
             $this->put(self::SESSION_LINKTO, $requestLinkTo, $session);
@@ -418,7 +418,7 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
     abstract protected function setSuggestions(Registration $registration, $user, string $token);
 
     /**
-     * Store data in cache.
+     * Store data in cache for the default amount of time.
      *
      * @param string $key
      * @param mixed $value
@@ -427,7 +427,20 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
      */
     protected function put(string $key, $value, Store $session): bool
     {
-        return $this->cache->put($this->buildKey($key, $session), $value, self::OAUTH_DATA_CACHE_LIFETIME);
+        return $this->cache->put($this->buildKey($key, $session), $value, self::$OAUTH_DATA_CACHE_LIFETIME);
+    }
+
+    /**
+     * Store data in cache indefinitely.
+     *
+     * @param string $key
+     * @param mixed $value
+     * @param Store $session
+     * @return boolean
+     */
+    protected function putForever(string $key, $value, Store $session): bool
+    {
+        return $this->cache->forever($this->buildKey($key, $session), $value);
     }
 
     /**
