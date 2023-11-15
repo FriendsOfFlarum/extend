@@ -417,23 +417,64 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
      */
     abstract protected function setSuggestions(Registration $registration, $user, string $token);
 
+    /**
+     * Store data in cache.
+     *
+     * @param string $key
+     * @param mixed $value
+     * @param Store $session
+     * @return boolean
+     */
     protected function put(string $key, $value, Store $session): bool
     {
-        return $this->cache->put($key . '_' . $session->getId(), $value, self::OAUTH_DATA_CACHE_LIFETIME);
+        return $this->cache->put($this->buildKey($key, $session), $value, self::OAUTH_DATA_CACHE_LIFETIME);
     }
 
-    protected function get($key, Store $session)
+    /**
+     * Get data from cache.
+     *
+     * @param string $key
+     * @param Store $session
+     * @return mixed|null
+     */
+    protected function get(string $key, Store $session)
     {
-        return $this->cache->get($key . '_' . $session->getId());
+        return $this->cache->get($this->buildKey($key, $session));
     }
 
-    protected function forget($key, Store $session): bool
+    /**
+     * Remove data from the cache.
+     *
+     * @param string $key
+     * @param Store $session
+     * @return boolean
+     */
+    protected function forget(string $key, Store $session): bool
     {
-        return $this->cache->forget($key . '_' . $session->getId());
+        return $this->cache->forget($this->buildKey($key, $session));
     }
 
-    protected function has($key, Store $session): bool
+    /**
+     * Check if a key exists in the cache.
+     *
+     * @param string $key
+     * @param Store $session
+     * @return boolean
+     */
+    protected function has(string $key, Store $session): bool
     {
-        return !!$this->cache->get($key . '_' . $session->getId());
+        return !!$this->cache->get($this->buildKey($key, $session));
+    }
+
+    /**
+     * Build the cache store key.
+     *
+     * @param string $key
+     * @param Store $session
+     * @return string
+     */
+    protected function buildKey(string $key, Store $session): string
+    {
+        return "{$key}_{$session->getId()}";
     }
 }
