@@ -120,6 +120,7 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
 
         $this->validateState($session, $request);
 
+        /** @var AccessToken $token */
         $token = $this->obtainAccessToken($provider, Arr::get($request->getQueryParams(), 'code'));
         $userResource = $provider->getResourceOwner($token);
 
@@ -169,14 +170,13 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
 
     protected function initializeSession(ServerRequestInterface $request, AbstractProvider $provider): Store
     {
+        /** @var Store $session */
         $session = $request->getAttribute('session');
 
-        $oauth_provider_key = self::SESSION_OAUTH2PROVIDER . '_' . $session->getId();
-        $this->cache->put($oauth_provider_key, $this->getProviderName(), self::OAUTH_DATA_CACHE_LIFETIME);
+        $this->put(self::SESSION_OAUTH2PROVIDER, $this->getProviderName(), $session);
 
         if ($requestLinkTo = Arr::get($request->getQueryParams(), 'linkTo')) {
-            $linkTo_key = self::SESSION_LINKTO . '_' . $session->getId();
-            $this->cache->put($linkTo_key, $requestLinkTo, self::OAUTH_DATA_CACHE_LIFETIME);
+            $this->put(self::SESSION_LINKTO, $requestLinkTo, $session);
         }
 
         $session->save();
@@ -212,8 +212,7 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
     {
         $authUrl = $provider->getAuthorizationUrl($this->getAuthorizationUrlOptions());
 
-        $oauth_state_key = self::SESSION_OAUTH2STATE . '_' . $session->getId();
-        $this->cache->put($oauth_state_key, $provider->getState(), self::OAUTH_DATA_CACHE_LIFETIME);
+        $this->put(self::SESSION_OAUTH2STATE, $provider->getState(), $session);
 
         return new RedirectResponse($authUrl . '&display=' . $this->getDisplayType());
     }
@@ -230,8 +229,7 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
     {
         $state = Arr::get($request->getQueryParams(), 'state');
 
-        $saved_state_key = self::SESSION_OAUTH2STATE . '_' . $session->getId();
-        $savedState = $this->cache->get($saved_state_key);
+        $savedState = $this->get(self::SESSION_OAUTH2STATE, $session);
 
         if (!$state || $state !== $savedState) {
             $this->handleOAuthError($session);
@@ -247,11 +245,8 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
      */
     protected function handleOAuthError(Store $session): void
     {
-        $oauth_state_key = self::SESSION_OAUTH2STATE . '_' . $session->getId();
-        $this->cache->forget($oauth_state_key);
-
-        $oauth_provider_key = self::SESSION_OAUTH2PROVIDER . '_' . $session->getId();
-        $this->cache->forget($oauth_provider_key);
+        $this->forget(self::SESSION_OAUTH2STATE, $session);
+        $this->forget(self::SESSION_OAUTH2PROVIDER, $session);
 
         throw new \Exception('Invalid state');
     }
@@ -327,15 +322,15 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
     {
         $actor = RequestUtil::getActor($request);
 
-        $linkTo_key = self::SESSION_LINKTO . '_' . $session->getId();
-        $linkTo = $this->cache->get($linkTo_key);
-        $sessionLinkToExists = !!$linkTo;
+        $linkTo = $this->get(self::SESSION_LINKTO, $session);
+        $sessionLinkToExists = $this->has(self::SESSION_LINKTO, $session);
 
         // Don't register a new user, just link to the existing account, else continue with registration.
         if ($sessionLinkToExists && $actor->exists) {
             $actor->assertRegistered();
             // forget the linkTo key
-            $this->cache->forget($linkTo_key);
+            $this->forget(self::SESSION_LINKTO, $session);
+
             $sessionLink = (int) $linkTo;
 
             if ($actor->id !== $sessionLink || $sessionLink === 0) {
@@ -364,8 +359,7 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
 
         $this->dispatchSuccessEvent($token, $resourceOwner, $actor);
 
-        $oauth_state_key = self::SESSION_OAUTH2STATE . '_' . $session->getId();
-        $this->cache->forget($oauth_state_key);
+        $this->forget(self::SESSION_OAUTH2STATE, $session);
 
         return $response;
     }
@@ -422,4 +416,24 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
      * @return void
      */
     abstract protected function setSuggestions(Registration $registration, $user, string $token);
+
+    protected function put(string $key, $value, Store $session): bool
+    {
+        return $this->cache->put($key . '_' . $session->getId(), $value, self::OAUTH_DATA_CACHE_LIFETIME);
+    }
+
+    protected function get($key, Store $session)
+    {
+        return $this->cache->get($key . '_' . $session->getId());
+    }
+
+    protected function forget($key, Store $session): bool
+    {
+        return $this->cache->forget($key . '_' . $session->getId());
+    }
+
+    protected function has($key, Store $session): bool
+    {
+        return !!$this->cache->get($key . '_' . $session->getId());
+    }
 }
