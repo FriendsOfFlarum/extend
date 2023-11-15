@@ -21,6 +21,7 @@ use Flarum\User\LoginProvider;
 use Flarum\User\User;
 use FoF\Extend\Events\LinkingToProvider;
 use FoF\Extend\Events\OAuthLoginSuccessful;
+use Illuminate\Contracts\Cache\Store as CacheStore;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Session\Store;
 use Illuminate\Support\Arr;
@@ -52,6 +53,11 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
     const SESSION_LINKTO = 'linkTo';
 
     /**
+     * How long to cache OAuth data for in seconds.
+     */
+    static $OAUTH_DATA_CACHE_LIFETIME = 60 * 5; // 5 minutes
+
+    /**
      * @var ResponseFactory
      */
     protected $response;
@@ -71,18 +77,25 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
      */
     protected $events;
 
+    /**
+     * @var CacheStore
+     */
+    protected $cache;
+
     protected static $afterOAuthSuccessCallbacks = [];
 
     public function __construct(
         ResponseFactory $response,
         SettingsRepositoryInterface $settings,
         UrlGenerator $url,
-        Dispatcher $events
+        Dispatcher $events,
+        CacheStore $cache,
     ) {
         $this->response = $response;
         $this->settings = $settings;
         $this->url = $url;
         $this->events = $events;
+        $this->cache = $cache;
     }
 
     /**
@@ -157,16 +170,16 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
 
     protected function initializeSession(ServerRequestInterface $request, AbstractProvider $provider): Store
     {
+        /** @var Store $session */
         $session = $request->getAttribute('session');
-        $session->put(self::SESSION_OAUTH2PROVIDER, $this->getProviderName());
+
+        $this->putForever(self::SESSION_OAUTH2PROVIDER, $this->getProviderName(), $session);
 
         if ($requestLinkTo = Arr::get($request->getQueryParams(), 'linkTo')) {
-            $session->put(self::SESSION_LINKTO, $requestLinkTo);
+            $this->put(self::SESSION_LINKTO, $requestLinkTo, $session);
         }
 
-        if ($state = Arr::get($request->getQueryParams(), 'state')) {
-            $session->put(self::SESSION_OAUTH2STATE, $state);
-        }
+        $session->save();
 
         if (method_exists($provider, 'setSession')) {
             $provider->setSession($session);
@@ -198,9 +211,10 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
     protected function redirectToAuthorizationUrl(AbstractProvider $provider, Store $session): RedirectResponse
     {
         $authUrl = $provider->getAuthorizationUrl($this->getAuthorizationUrlOptions());
-        $session->put(self::SESSION_OAUTH2STATE, $provider->getState());
 
-        return new RedirectResponse($authUrl.'&display='.$this->getDisplayType());
+        $this->put(self::SESSION_OAUTH2STATE, $provider->getState(), $session);
+
+        return new RedirectResponse($authUrl . '&display=' . $this->getDisplayType());
     }
 
     /**
@@ -215,7 +229,9 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
     {
         $state = Arr::get($request->getQueryParams(), 'state');
 
-        if (!$state || $state !== $session->get(self::SESSION_OAUTH2STATE)) {
+        $savedState = $this->get(self::SESSION_OAUTH2STATE, $session);
+
+        if (!$state || $state !== $savedState) {
             $this->handleOAuthError($session);
         }
     }
@@ -229,8 +245,8 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
      */
     protected function handleOAuthError(Store $session): void
     {
-        $session->remove(self::SESSION_OAUTH2STATE);
-        $session->remove(self::SESSION_OAUTH2PROVIDER);
+        $this->forget(self::SESSION_OAUTH2STATE, $session);
+        $this->forget(self::SESSION_OAUTH2PROVIDER, $session);
 
         throw new \Exception('Invalid state');
     }
@@ -306,10 +322,15 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
     {
         $actor = RequestUtil::getActor($request);
 
+        $sessionLinkToExists = $this->has(self::SESSION_LINKTO, $session);
+
         // Don't register a new user, just link to the existing account, else continue with registration.
-        if ($session->has(self::SESSION_LINKTO) && $actor->exists) {
+        if ($sessionLinkToExists && $actor->exists) {
             $actor->assertRegistered();
-            $sessionLink = (int) $session->remove(self::SESSION_LINKTO);
+            // forget the linkTo key
+            $this->forget(self::SESSION_LINKTO, $session);
+
+            $sessionLink = (int) $this->get(self::SESSION_LINKTO, $session);
 
             if ($actor->id !== $sessionLink || $sessionLink === 0) {
                 throw new ValidationException(['linkAccount' => 'User data mismatch']);
@@ -337,10 +358,11 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
 
         $this->dispatchSuccessEvent($token, $resourceOwner, $actor);
 
-        $session->remove(self::SESSION_OAUTH2STATE);
+        $this->forget(self::SESSION_OAUTH2STATE, $session);
 
         return $response;
     }
+
 
     public static function setAfterOAuthSuccessCallbacks(array $callbacks)
     {
@@ -393,4 +415,78 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
      * @return void
      */
     abstract protected function setSuggestions(Registration $registration, $user, string $token);
+
+    /**
+     * Store data in cache for the default amount of time.
+     *
+     * @param string $key
+     * @param mixed $value
+     * @param Store $session
+     * @return boolean
+     */
+    protected function put(string $key, $value, Store $session): bool
+    {
+        return $this->cache->put($this->buildKey($key, $session), $value, self::$OAUTH_DATA_CACHE_LIFETIME);
+    }
+
+    /**
+     * Store data in cache indefinitely.
+     *
+     * @param string $key
+     * @param mixed $value
+     * @param Store $session
+     * @return boolean
+     */
+    protected function putForever(string $key, $value, Store $session): bool
+    {
+        return $this->cache->forever($this->buildKey($key, $session), $value);
+    }
+
+    /**
+     * Get data from cache.
+     *
+     * @param string $key
+     * @param Store $session
+     * @return mixed|null
+     */
+    protected function get(string $key, Store $session)
+    {
+        return $this->cache->get($this->buildKey($key, $session));
+    }
+
+    /**
+     * Remove data from the cache.
+     *
+     * @param string $key
+     * @param Store $session
+     * @return boolean
+     */
+    protected function forget(string $key, Store $session): bool
+    {
+        return $this->cache->forget($this->buildKey($key, $session));
+    }
+
+    /**
+     * Check if a key exists in the cache.
+     *
+     * @param string $key
+     * @param Store $session
+     * @return boolean
+     */
+    protected function has(string $key, Store $session): bool
+    {
+        return !!$this->cache->get($this->buildKey($key, $session));
+    }
+
+    /**
+     * Build the cache store key.
+     *
+     * @param string $key
+     * @param Store $session
+     * @return string
+     */
+    protected function buildKey(string $key, Store $session): string
+    {
+        return "{$key}_{$session->getId()}";
+    }
 }
