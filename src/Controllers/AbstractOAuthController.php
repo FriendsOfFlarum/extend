@@ -55,7 +55,7 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
     /**
      * How long to cache OAuth data for in seconds.
      */
-    static $OAUTH_DATA_CACHE_LIFETIME = 60;
+    static $OAUTH_DATA_CACHE_LIFETIME = 60 * 5; // 5 minutes
 
     /**
      * @var ResponseFactory
