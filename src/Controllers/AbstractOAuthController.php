@@ -21,6 +21,7 @@ use Flarum\User\LoginProvider;
 use Flarum\User\User;
 use FoF\Extend\Events\LinkingToProvider;
 use FoF\Extend\Events\OAuthLoginSuccessful;
+use Illuminate\Contracts\Cache\Store as CacheStore;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Session\Store;
 use Illuminate\Support\Arr;
@@ -52,6 +53,11 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
     const SESSION_LINKTO = 'linkTo';
 
     /**
+     * 
+     */
+    const OAUTH_DATA_CACHE_LIFETIME = 60;
+
+    /**
      * @var ResponseFactory
      */
     protected $response;
@@ -71,18 +77,25 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
      */
     protected $events;
 
+    /**
+     * @var CacheStore
+     */
+    protected $cache;
+
     protected static $afterOAuthSuccessCallbacks = [];
 
     public function __construct(
         ResponseFactory $response,
         SettingsRepositoryInterface $settings,
         UrlGenerator $url,
-        Dispatcher $events
+        Dispatcher $events,
+        CacheStore $cache,
     ) {
         $this->response = $response;
         $this->settings = $settings;
         $this->url = $url;
         $this->events = $events;
+        $this->cache = $cache;
     }
 
     /**
@@ -107,7 +120,6 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
 
         $this->validateState($session, $request);
 
-        /** @var AccessToken $token */
         $token = $this->obtainAccessToken($provider, Arr::get($request->getQueryParams(), 'code'));
         $userResource = $provider->getResourceOwner($token);
 
@@ -158,15 +170,16 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
     protected function initializeSession(ServerRequestInterface $request, AbstractProvider $provider): Store
     {
         $session = $request->getAttribute('session');
-        $session->put(self::SESSION_OAUTH2PROVIDER, $this->getProviderName());
+
+        $oauth_provider_key = self::SESSION_OAUTH2PROVIDER . '_' . $session->getId();
+        $this->cache->put($oauth_provider_key, $this->getProviderName(), self::OAUTH_DATA_CACHE_LIFETIME);
 
         if ($requestLinkTo = Arr::get($request->getQueryParams(), 'linkTo')) {
-            $session->put(self::SESSION_LINKTO, $requestLinkTo);
+            $linkTo_key = self::SESSION_LINKTO . '_' . $session->getId();
+            $this->cache->put($linkTo_key, $requestLinkTo, self::OAUTH_DATA_CACHE_LIFETIME);
         }
 
-        if ($state = Arr::get($request->getQueryParams(), 'state')) {
-            $session->put(self::SESSION_OAUTH2STATE, $state);
-        }
+        $session->save();
 
         if (method_exists($provider, 'setSession')) {
             $provider->setSession($session);
@@ -198,9 +211,11 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
     protected function redirectToAuthorizationUrl(AbstractProvider $provider, Store $session): RedirectResponse
     {
         $authUrl = $provider->getAuthorizationUrl($this->getAuthorizationUrlOptions());
-        $session->put(self::SESSION_OAUTH2STATE, $provider->getState());
 
-        return new RedirectResponse($authUrl.'&display='.$this->getDisplayType());
+        $oauth_state_key = self::SESSION_OAUTH2STATE . '_' . $session->getId();
+        $this->cache->put($oauth_state_key, $provider->getState(), self::OAUTH_DATA_CACHE_LIFETIME);
+
+        return new RedirectResponse($authUrl . '&display=' . $this->getDisplayType());
     }
 
     /**
@@ -215,7 +230,10 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
     {
         $state = Arr::get($request->getQueryParams(), 'state');
 
-        if (!$state || $state !== $session->get(self::SESSION_OAUTH2STATE)) {
+        $saved_state_key = self::SESSION_OAUTH2STATE . '_' . $session->getId();
+        $savedState = $this->cache->get($saved_state_key);
+
+        if (!$state || $state !== $savedState) {
             $this->handleOAuthError($session);
         }
     }
@@ -229,8 +247,11 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
      */
     protected function handleOAuthError(Store $session): void
     {
-        $session->remove(self::SESSION_OAUTH2STATE);
-        $session->remove(self::SESSION_OAUTH2PROVIDER);
+        $oauth_state_key = self::SESSION_OAUTH2STATE . '_' . $session->getId();
+        $this->cache->forget($oauth_state_key);
+
+        $oauth_provider_key = self::SESSION_OAUTH2PROVIDER . '_' . $session->getId();
+        $this->cache->forget($oauth_provider_key);
 
         throw new \Exception('Invalid state');
     }
@@ -306,10 +327,16 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
     {
         $actor = RequestUtil::getActor($request);
 
+        $linkTo_key = self::SESSION_LINKTO . '_' . $session->getId();
+        $linkTo = $this->cache->get($linkTo_key);
+        $sessionLinkToExists = !!$linkTo;
+
         // Don't register a new user, just link to the existing account, else continue with registration.
-        if ($session->has(self::SESSION_LINKTO) && $actor->exists) {
+        if ($sessionLinkToExists && $actor->exists) {
             $actor->assertRegistered();
-            $sessionLink = (int) $session->remove(self::SESSION_LINKTO);
+            // forget the linkTo key
+            $this->cache->forget($linkTo_key);
+            $sessionLink = (int) $linkTo;
 
             if ($actor->id !== $sessionLink || $sessionLink === 0) {
                 throw new ValidationException(['linkAccount' => 'User data mismatch']);
@@ -337,10 +364,12 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
 
         $this->dispatchSuccessEvent($token, $resourceOwner, $actor);
 
-        $session->remove(self::SESSION_OAUTH2STATE);
+        $oauth_state_key = self::SESSION_OAUTH2STATE . '_' . $session->getId();
+        $this->cache->forget($oauth_state_key);
 
         return $response;
     }
+
 
     public static function setAfterOAuthSuccessCallbacks(array $callbacks)
     {
