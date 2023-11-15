@@ -55,7 +55,7 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
     /**
      * How long to cache OAuth data for in seconds.
      */
-    static $OAUTH_DATA_CACHE_LIFETIME = 60 * 5; // 5 minutes
+    public static $OAUTH_DATA_CACHE_LIFETIME = 60 * 5; // 5 minutes
 
     /**
      * @var ResponseFactory
@@ -214,7 +214,7 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
 
         $this->put(self::SESSION_OAUTH2STATE, $provider->getState(), $session);
 
-        return new RedirectResponse($authUrl . '&display=' . $this->getDisplayType());
+        return new RedirectResponse($authUrl.'&display='.$this->getDisplayType());
     }
 
     /**
@@ -363,7 +363,6 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
         return $response;
     }
 
-
     public static function setAfterOAuthSuccessCallbacks(array $callbacks)
     {
         static::$afterOAuthSuccessCallbacks = array_merge(static::$afterOAuthSuccessCallbacks, $callbacks);
@@ -420,9 +419,10 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
      * Store data in cache for the default amount of time.
      *
      * @param string $key
-     * @param mixed $value
-     * @param Store $session
-     * @return boolean
+     * @param mixed  $value
+     * @param Store  $session
+     *
+     * @return bool
      */
     protected function put(string $key, $value, Store $session): bool
     {
@@ -433,9 +433,10 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
      * Store data in cache indefinitely.
      *
      * @param string $key
-     * @param mixed $value
-     * @param Store $session
-     * @return boolean
+     * @param mixed  $value
+     * @param Store  $session
+     *
+     * @return bool
      */
     protected function putForever(string $key, $value, Store $session): bool
     {
@@ -446,7 +447,8 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
      * Get data from cache.
      *
      * @param string $key
-     * @param Store $session
+     * @param Store  $session
+     *
      * @return mixed|null
      */
     protected function get(string $key, Store $session)
@@ -458,8 +460,9 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
      * Remove data from the cache.
      *
      * @param string $key
-     * @param Store $session
-     * @return boolean
+     * @param Store  $session
+     *
+     * @return bool
      */
     protected function forget(string $key, Store $session): bool
     {
@@ -470,19 +473,21 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
      * Check if a key exists in the cache.
      *
      * @param string $key
-     * @param Store $session
-     * @return boolean
+     * @param Store  $session
+     *
+     * @return bool
      */
     protected function has(string $key, Store $session): bool
     {
-        return !!$this->cache->get($this->buildKey($key, $session));
+        return (bool) $this->cache->get($this->buildKey($key, $session));
     }
 
     /**
      * Build the cache store key.
      *
      * @param string $key
-     * @param Store $session
+     * @param Store  $session
+     *
      * @return string
      */
     protected function buildKey(string $key, Store $session): string
