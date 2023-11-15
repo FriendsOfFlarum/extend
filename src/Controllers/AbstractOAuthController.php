@@ -327,10 +327,8 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
         // Don't register a new user, just link to the existing account, else continue with registration.
         if ($sessionLinkToExists && $actor->exists) {
             $actor->assertRegistered();
-            // forget the linkTo key
-            $this->forget(self::SESSION_LINKTO, $session);
-
             $sessionLink = (int) $this->get(self::SESSION_LINKTO, $session);
+            $this->forget(self::SESSION_LINKTO, $session);
 
             if ($actor->id !== $sessionLink || $sessionLink === 0) {
                 throw new ValidationException(['linkAccount' => 'User data mismatch']);
