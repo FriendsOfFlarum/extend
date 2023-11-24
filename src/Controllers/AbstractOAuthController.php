@@ -345,9 +345,11 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
             );
         }
 
+        $providerName = $this->getProviderName();
+
         // Execute registered callbacks
         foreach (static::$afterOAuthSuccessCallbacks as $callback) {
-            $result = $callback($request, $token, $resourceOwner, $this->getProviderName());
+            $result = $callback($request, $token, $resourceOwner, $providerName);
 
             if ($result !== null) {
                 return $result;
