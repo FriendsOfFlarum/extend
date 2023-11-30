@@ -89,7 +89,7 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
         SettingsRepositoryInterface $settings,
         UrlGenerator $url,
         Dispatcher $events,
-        CacheStore $cache,
+        CacheStore $cache
     ) {
         $this->response = $response;
         $this->settings = $settings;
