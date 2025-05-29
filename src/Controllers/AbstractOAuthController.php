@@ -65,7 +65,8 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
         protected UrlGenerator $url,
         protected Dispatcher $events,
         protected CacheStore $cache
-    ) { }
+    ) {
+    }
 
     /**
      * @throws \Exception
