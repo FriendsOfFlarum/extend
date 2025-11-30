@@ -43,7 +43,7 @@ class OAuthController implements ExtenderInterface
         return $this;
     }
 
-    public function extend(Container $container, Extension $extension = null)
+    public function extend(Container $container, ?Extension $extension = null): void
     {
         foreach ($this->afterOAuthSuccessCallbacks as $index => $callback) {
             $this->afterOAuthSuccessCallbacks[$index] = ContainerUtil::wrapCallback($callback, $container);

@@ -17,49 +17,40 @@ use League\OAuth2\Client\Token\AccessTokenInterface;
 
 class OAuthLoginSuccessful
 {
-    /**
-     * The access token provided by the service.
-     *
-     * @var AccessTokenInterface
-     */
-    public $token;
+    public function __construct(
+        /**
+         * @param $token
+         *               The access token provided by the service.
+         */
+        public AccessTokenInterface $token,
 
-    /**
-     * THe complete ResourceOwner object.
-     *
-     * @var ResourceOwnerInterface
-     */
-    public $userResource;
+        /**
+         * @param $userResource
+         *                      The complete ResourceOwner object.
+         */
+        public ResourceOwnerInterface $userResource,
 
-    /**
-     * The OAuth provider name. This is used in the `login_providers` table as the `provider` column.
-     *
-     * @var string
-     */
-    public $providerName;
+        /**
+         * @param $providerName
+         *                      The OAuth provider name. This is used in the `login_providers` table as the `provider` column.
+         */
+        public string $providerName,
 
-    /**
-     * The providers unique identifier as given by the provider. This is used in the `login_providers` table as the `identifier` column.
-     *
-     * @var string
-     */
-    public $identifier;
+        /**
+         * @param $identifier
+         *                    For a "normal" login, this value will always be `Guest`, as when this event is dispatched we have not yet completed the complete login flow.
+         *
+         * If a logged in user is attemping to link their existing Flarum account with a OAuth provider, this will contain the current user object.
+         */
+        public string $identifier,
 
-    /**
-     * For a "normal" login, this value will always be `Guest`, as when this event is dispatched we have not yet completed the complete login flow.
-     *
-     * If a logged in user is attemping to link their existing Flarum account with a OAuth provider, this will contain the current user object.
-     *
-     * @var ?User
-     */
-    public $actor;
-
-    public function __construct(AccessTokenInterface $token, ResourceOwnerInterface $userResource, string $providerName, string $identifier, ?User $actor)
-    {
-        $this->token = $token;
-        $this->userResource = $userResource;
-        $this->providerName = $providerName;
-        $this->identifier = $identifier;
-        $this->actor = $actor;
+        /**
+         * @param $actor
+         *               For a "normal" login, this value will always be `Guest`, as when this event is dispatched we have not yet completed the complete login flow.
+         *
+         * If a logged-in user is attempting to link their existing Flarum account with a OAuth provider, this will contain the current user object.
+         */
+        public ?User $actor = null
+    ) {
     }
 }

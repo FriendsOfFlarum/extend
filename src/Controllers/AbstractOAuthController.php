@@ -40,62 +40,32 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
     /**
      * Session key for OAuth2 state.
      */
-    const SESSION_OAUTH2STATE = 'oauth2state';
+    public const SESSION_OAUTH2STATE = 'oauth2state';
 
     /**
      * Session key for OAuth2 provider.
      */
-    const SESSION_OAUTH2PROVIDER = 'oauth2provider';
+    public const SESSION_OAUTH2PROVIDER = 'oauth2provider';
 
     /**
      * Session key for linkTo.
      */
-    const SESSION_LINKTO = 'linkTo';
+    public const SESSION_LINKTO = 'linkTo';
 
     /**
      * How long to cache OAuth data for in seconds.
      */
-    public static $OAUTH_DATA_CACHE_LIFETIME = 60 * 5; // 5 minutes
+    public static int $OAUTH_DATA_CACHE_LIFETIME = 60 * 5; // 5 minutes
 
-    /**
-     * @var ResponseFactory
-     */
-    protected $response;
-
-    /**
-     * @var SettingsRepositoryInterface
-     */
-    protected $settings;
-
-    /**
-     * @var UrlGenerator
-     */
-    protected $url;
-
-    /**
-     * @var Dispatcher
-     */
-    protected $events;
-
-    /**
-     * @var CacheStore
-     */
-    protected $cache;
-
-    protected static $afterOAuthSuccessCallbacks = [];
+    protected static array $afterOAuthSuccessCallbacks = [];
 
     public function __construct(
-        ResponseFactory $response,
-        SettingsRepositoryInterface $settings,
-        UrlGenerator $url,
-        Dispatcher $events,
-        CacheStore $cache
+        protected ResponseFactory $response,
+        protected SettingsRepositoryInterface $settings,
+        protected UrlGenerator $url,
+        protected Dispatcher $events,
+        protected CacheStore $cache
     ) {
-        $this->response = $response;
-        $this->settings = $settings;
-        $this->url = $url;
-        $this->events = $events;
-        $this->cache = $cache;
     }
 
     /**
@@ -291,7 +261,7 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
      */
     protected function link(User $user, ResourceOwnerInterface $resourceOwner): HtmlResponse
     {
-        /** @var LoginProvider|null */
+        /** @var LoginProvider|null $provider */
         $provider = LoginProvider::where('identifier', $this->getIdentifier($resourceOwner))
             ->where('provider', $this->getProviderName())
             ->first();
