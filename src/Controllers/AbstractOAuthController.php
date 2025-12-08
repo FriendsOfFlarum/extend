@@ -53,6 +53,11 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
     public const SESSION_LINKTO = 'linkTo';
 
     /**
+     * Session key for OAuth2 PKCE code.
+     */
+    public const SESSION_OAUTH2_PKCE_CODE = 'oauth2_pkce_code';
+
+    /**
      * How long to cache OAuth data for in seconds.
      */
     public static int $OAUTH_DATA_CACHE_LIFETIME = 60 * 5; // 5 minutes
@@ -89,6 +94,13 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
         }
 
         $this->validateState($session, $request);
+
+        // Restore PKCE code if it was stored
+        $pkceCode = $this->get(self::SESSION_OAUTH2_PKCE_CODE, $session);
+        if (!empty($pkceCode)) {
+            $provider->setPkceCode($pkceCode);
+            $this->forget(self::SESSION_OAUTH2_PKCE_CODE, $session);
+        }
 
         /** @var AccessToken $token */
         $token = $this->obtainAccessToken($provider, Arr::get($request->getQueryParams(), 'code'));
@@ -184,6 +196,12 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
 
         $this->put(self::SESSION_OAUTH2STATE, $provider->getState(), $session);
 
+        // Store PKCE code if provider generated one
+        $pkceCode = $provider->getPkceCode();
+        if (!empty($pkceCode)) {
+            $this->put(self::SESSION_OAUTH2_PKCE_CODE, $pkceCode, $session);
+        }
+
         return new RedirectResponse($authUrl.'&display='.$this->getDisplayType());
     }
 
@@ -217,6 +235,7 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
     {
         $this->forget(self::SESSION_OAUTH2STATE, $session);
         $this->forget(self::SESSION_OAUTH2PROVIDER, $session);
+        $this->forget(self::SESSION_OAUTH2_PKCE_CODE, $session);
 
         throw new \Exception('Invalid state');
     }
