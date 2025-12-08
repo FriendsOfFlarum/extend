@@ -35,7 +35,7 @@ class ExtensionSettings implements ExtenderInterface
      */
     private $defaults = [];
 
-    public function extend(Container $container, Extension $extension = null)
+    public function extend(Container $container, ?Extension $extension = null)
     {
         $container->resolving(
             'flarum.frontend.forum',
