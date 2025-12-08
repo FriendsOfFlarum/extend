@@ -232,7 +232,7 @@ abstract class AbstractOAuthController implements RequestHandlerInterface
             $this->put(self::SESSION_OAUTH2_PKCE_CODE, $pkceCode, $session);
         }
 
-        return new RedirectResponse($authUrl . '&display=' . $this->getDisplayType());
+        return new RedirectResponse($authUrl.'&display='.$this->getDisplayType());
     }
 
     /**
