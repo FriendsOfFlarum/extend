@@ -15,24 +15,31 @@ use Flarum\User\User;
 
 class LinkingToProvider
 {
-    public function __construct(
-        /**
-         * @param $providerName
-         *                      The OAuth provider name. This is used in the `login_providers` table as the `provider` column.
-         */
-        public string $providerName,
+    /**
+     * The OAuth provider name. This is used in the `login_providers` table as the `provider` column.
+     *
+     * @var string
+     */
+    public $providerName;
 
-        /**
-         * @param $identifier
-         *                    The provider's unique identifier as given by the provider. This is used in the `login_providers` table as the `identifier` column.
-         */
-        public string $identifier,
+    /**
+     * The providers unique identifier as given by the provider. This is used in the `login_providers` table as the `identifier` column.
+     *
+     * @var string
+     */
+    public $identifier;
 
-        /**
-         * @param $actor
-         *               The user object that is attempting to link their account.
-         */
-        public User $actor
-    ) {
+    /**
+     * The user object that is attempting to link their account.
+     *
+     * @var User
+     */
+    public $actor;
+
+    public function __construct(string $providerName, string $identifier, User $actor)
+    {
+        $this->providerName = $providerName;
+        $this->identifier = $identifier;
+        $this->actor = $actor;
     }
 }
